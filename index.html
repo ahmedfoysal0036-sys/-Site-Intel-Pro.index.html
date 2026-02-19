@@ -25,7 +25,6 @@
         .info-value { font-size: 14px; color: #333; }
         .key-info-box { background: #fff3cd; padding: 15px; border-radius: 8px; margin-top: 15px; font-size: 13px; color: #856404; border: 1px solid #ffeeba; white-space: pre-wrap; line-height: 1.5; }
         .map-btn { display: block; text-align: center; margin-top: 15px; background: #ea4335; color: white; text-decoration: none; padding: 12px; border-radius: 10px; font-weight: bold; }
-        .edit-input { padding: 5px; border-radius: 5px; border: 1px solid #3a7bd5; width: 60%; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -42,6 +41,7 @@
     <div class="card" style="border-top: 3px solid #2ed573;">
         <label style="font-weight: 600; font-size: 12px; color: #2ed573;">ADD NEW SITE</label>
         <input type="text" id="newName" placeholder="Site Name">
+        <input type="text" id="newClient" placeholder="Client (e.g. Banglalink)">
         <div style="display: flex; gap: 5px;">
             <input type="number" id="newLat" placeholder="Lat" step="any">
             <input type="number" id="newLong" placeholder="Long" step="any">
@@ -60,7 +60,7 @@
     <div id="result">
         <div id="displayArea">
             <div id="content"></div>
-            <button class="edit-mode-btn" onclick="toggleEditMode()"><i class="fa-solid fa-pen-to-square"></i> Edit this Info</button>
+            <button class="edit-mode-btn" onclick="toggleEditMode()"><i class="fa-solid fa-pen-to-square"></i> Edit Info</button>
         </div>
         
         <div id="editArea" style="display:none;">
@@ -84,7 +84,7 @@
         document.getElementById('status').innerText = `Database Size: ${excelData.length} Sites`;
     }
 
-    // Upload Logic
+    // Upload Logic - Strictly follows Excel "Client" Column
     document.getElementById('upload').addEventListener('change', function(e) {
         const file = e.target.files[0];
         const reader = new FileReader();
@@ -94,23 +94,27 @@
             const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval: ""});
             
             excelData = rawJson.map(item => {
-                let sName = "", sLat = "", sLong = "", sKey = "N/A";
+                let sName = "", sLat = "", sLong = "", sKey = "N/A", sClient = "";
                 Object.keys(item).forEach(key => {
                     let k = key.trim().toLowerCase();
+                    // Column Mapping
                     if(k.includes("site name") || k === "site") sName = item[key];
                     if(k === "lat" || k === "latitude") sLat = item[key];
                     if(k === "long" || k === "longitude" || k === "lon") sLong = item[key];
                     if(k.includes("key information") || k.includes("key info")) sKey = item[key];
+                    if(k === "client" || k === "operator") sClient = item[key];
                 });
+                
                 return {
                     "Site Name": sName ? sName.toString().trim() : "",
                     "Lat": sLat,
                     "Long": sLong,
-                    "Site key information": sKey || "N/A"
+                    "Site key information": sKey || "N/A",
+                    "Client": sClient || "N/A" // No auto-detection, strictly Excel data
                 };
             });
             saveToStorage();
-            alert("Database Synced!");
+            alert("Database Synced! Using Excel 'Client' data.");
         };
         reader.readAsArrayBuffer(file);
     });
@@ -129,6 +133,7 @@
             document.getElementById('displayArea').style.display = "block";
             
             renderDisplay(site);
+            // Fix Map link with direct coords
             document.getElementById('mapLink').href = `https://www.google.com/maps?q=${site['Lat']},${site['Long']}`;
         } else {
             alert("Site not found!");
@@ -138,7 +143,7 @@
 
     function renderDisplay(site) {
         document.getElementById('content').innerHTML = `
-            <div class="info-row"><span class="info-label">Operator:</span> <span class="info-value">${getClientName(site['Site Name'])}</span></div>
+            <div class="info-row"><span class="info-label">Operator/Client:</span> <span class="info-value"><strong>${site['Client']}</strong></span></div>
             <div class="info-row"><span class="info-label">Site ID:</span> <span class="info-value">${site['Site Name']}</span></div>
             <div class="info-row"><span class="info-label">Lat:</span> <span class="info-value">${site['Lat']}</span></div>
             <div class="info-row"><span class="info-label">Long:</span> <span class="info-value">${site['Long']}</span></div>
@@ -162,48 +167,44 @@
     }
 
     function saveEdit() {
-        const newLat = document.getElementById('editLat').value;
-        const newLong = document.getElementById('editLong').value;
-        const newKey = document.getElementById('editKeyInfo').value;
-
-        // Update in main array
         const index = excelData.findIndex(s => s['Site Name'] === currentSearchingSite['Site Name']);
         if(index > -1) {
-            excelData[index]['Lat'] = newLat;
-            excelData[index]['Long'] = newLong;
-            excelData[index]['Site key information'] = newKey;
+            excelData[index]['Lat'] = document.getElementById('editLat').value;
+            excelData[index]['Long'] = document.getElementById('editLong').value;
+            excelData[index]['Site key information'] = document.getElementById('editKeyInfo').value;
             
             saveToStorage();
             renderDisplay(excelData[index]);
             toggleEditMode();
-            alert("Site Information Updated!");
+            alert("Updated!");
         }
     }
 
     function addNewSite() {
         const name = document.getElementById('newName').value.trim();
+        const client = document.getElementById('newClient').value.trim();
         const lat = document.getElementById('newLat').value;
         const lon = document.getElementById('newLong').value;
         const info = document.getElementById('newKeyInfo').value.trim();
-        if(!name || !lat || !lon) return alert("Fill all fields!");
+        
+        if(!name || !lat || !lon) return alert("Fill Name, Lat, Long!");
 
-        excelData.push({ "Site Name": name, "Lat": lat, "Long": lon, "Site key information": info || "N/A" });
+        excelData.push({ 
+            "Site Name": name, 
+            "Client": client || "N/A",
+            "Lat": lat, 
+            "Long": lon, 
+            "Site key information": info || "N/A" 
+        });
         saveToStorage();
-        alert("New Site Added!");
+        alert("Added!");
     }
 
     function exportToExcel() {
         const worksheet = XLSX.utils.json_to_sheet(excelData);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "UpdatedData");
-        XLSX.writeFile(workbook, "Updated_Database.xlsx");
-    }
-
-    function getClientName(id) {
-        id = id.toString().toUpperCase();
-        if (id.startsWith("DHK_X") || id.startsWith("DHK_")) return "Banglalink";
-        if (id.includes("01") || id.startsWith("DHDH") || id.startsWith("DHBN")) return "Robi / Airtel";
-        return "GP / Others";
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Updated_Database");
+        XLSX.writeFile(workbook, "Updated_Site_Intel.xlsx");
     }
 
     function saveToStorage() {
@@ -212,7 +213,7 @@
     }
 
     function clearData() {
-        if(confirm("Clear everything?")) { localStorage.removeItem('siteDatabase'); location.reload(); }
+        if(confirm("Clear local database?")) { localStorage.removeItem('siteDatabase'); location.reload(); }
     }
 </script>
 </body>
