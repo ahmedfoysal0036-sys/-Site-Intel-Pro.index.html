@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Intel Pro - Professor Edition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root { --primary: #00d2ff; --secondary: #3a7bd5; --dark: #1e272e; --glass: rgba(255, 255, 255, 0.9); }
+        body { font-family: 'Poppins', sans-serif; background: linear-gradient(135deg, #3a7bd5, #00d2ff); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; margin: 0; }
+        .container { background: var(--glass); backdrop-filter: blur(10px); width: 100%; max-width: 500px; padding: 30px; border-radius: 24px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); text-align: center; }
+        h2 { color: var(--dark); font-weight: 700; margin-bottom: 20px; letter-spacing: -1px; }
+        .card { background: rgba(255,255,255,0.5); border: 1px solid rgba(58, 123, 213, 0.2); padding: 15px; border-radius: 15px; margin-bottom: 20px; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 12px; margin: 8px 0; border: none; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        button { background: linear-gradient(to right, #3a7bd5, #00d2ff); color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; font-size: 15px; width: 100%; font-weight: bold; transition: 0.3s; }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+        .add-btn { background: #2ed573; }
+        .backup-btn { background: #ffa502; margin-top: 10px; }
+        #result { margin-top: 25px; text-align: left; display: none; padding: 15px; background: white; border-radius: 12px; animation: fadeIn 0.5s ease; }
+        .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .info-label { font-weight: 600; color: #555; }
+        .map-btn { display: block; text-align: center; margin-top: 15px; background: #ff4757; color: white; text-decoration: none; padding: 12px; border-radius: 10px; font-weight: bold; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2><i class="fa-solid fa-satellite-dish"></i> Site Intel Pro</h2>
+    
+    <div class="card">
+        <label style="font-weight: 600; font-size: 13px; color: var(--secondary);">UPLOAD DATABASE (.XLSX)</label>
+        <input type="file" id="upload" accept=".xlsx, .xls" style="margin-top:5px; font-size: 12px;">
+    </div>
+
+    <div class="card">
+        <input type="text" id="siteInput" placeholder="Search Site Name..." onkeypress="if(event.key === 'Enter') searchSite()">
+        <button onclick="searchSite()"><i class="fa-solid fa-magnifying-glass"></i> Search Site</button>
+    </div>
+
+    <div class="card" style="border-style: dashed;">
+        <label style="font-weight: 600; font-size: 13px; color: #2ed573;">ADD NEW CUSTOM SITE</label>
+        <input type="text" id="newName" placeholder="Site Name">
+        <div style="display: flex; gap: 5px;">
+            <input type="number" id="newLat" placeholder="Lat" step="any">
+            <input type="number" id="newLong" placeholder="Long" step="any">
+        </div>
+        <button class="add-btn" onclick="addNewSite()"><i class="fa-solid fa-plus"></i> Add to List</button>
+    </div>
+
+    <button class="backup-btn" onclick="exportExcel()"><i class="fa-solid fa-file-export"></i> Backup Updated Excel</button>
+
+    <div id="result">
+        <div id="content"></div>
+        <a id="mapLink" href="#" target="_blank" class="map-btn"><i class="fa-solid fa-location-dot"></i> View on Google Maps</a>
+    </div>
+</div>
+
+<script>
+    let excelData = [];
+
+    // File Upload
+    document.getElementById('upload').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const data = new Uint8Array(event.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            excelData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+            alert("Database Loaded! " + excelData.length + " sites found.");
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    // Operator Logic
+    function getClientName(siteId) {
+        const id = siteId.toUpperCase();
+        if (id.startsWith("DHK_X") || id.startsWith("DHK_Y") || id.startsWith("DHK_")) return "Banglalink";
+        if (id.includes("01") && (id.startsWith("DHDHN") || id.startsWith("DHDHR"))) return "Robi";
+        if (id.startsWith("DHDHN") || id.startsWith("DHDHNA")) return "Grameenphone (GP)";
+        return "Manual/Other";
+    }
+
+    // Search Site
+    function searchSite() {
+        const userInput = document.getElementById('siteInput').value.trim();
+        const resultDiv = document.getElementById('result');
+        const contentDiv = document.getElementById('content');
+        
+        if (excelData.length === 0) { alert("Load Excel first!"); return; }
+
+        const site = excelData.find(item => 
+            (item['Site Name'] || "").toString().toLowerCase() === userInput.toLowerCase()
+        );
+
+        if (site) {
+            resultDiv.style.display = "block";
+            contentDiv.innerHTML = `
+                <div class="info-row"><span class="info-label">Operator:</span> <span style="color:#1e90ff; font-weight:bold">${getClientName(userInput)}</span></div>
+                <div class="info-row"><span class="info-label">Site Name:</span> <span>${site['Site Name']}</span></div>
+                <div class="info-row"><span class="info-label">Lat:</span> <span>${site['Lat']}</span></div>
+                <div class="info-row"><span class="info-label">Long:</span> <span>${site['Long']}</span></div>
+            `;
+            document.getElementById('mapLink').href = `https://www.google.com/maps?q=${site['Lat']},${site['Long']}`;
+        } else {
+            alert("Site Not Found!");
+            resultDiv.style.display = "none";
+        }
+    }
+
+    // Add New Site
+    function addNewSite() {
+        const name = document.getElementById('newName').value.trim();
+        const lat = document.getElementById('newLat').value;
+        const lon = document.getElementById('newLong').value;
+
+        if (!name || !lat || !lon) { alert("Please fill all fields!"); return; }
+
+        const newEntry = { "Site Name": name, "Lat": parseFloat(lat), "Long": parseFloat(lon) };
+        excelData.push(newEntry);
+        
+        alert(name + " added successfully!");
+        document.getElementById('newName').value = "";
+        document.getElementById('newLat').value = "";
+        document.getElementById('newLong').value = "";
+    }
+
+    // Backup to Excel
+    function exportExcel() {
+        if (excelData.length === 0) { alert("No data to export!"); return; }
+        const ws = XLSX.utils.json_to_sheet(excelData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Sites");
+        XLSX.writeFile(wb, "Updated_Site_Database.xlsx");
+    }
+</script>
+
+</body>
+</html>
